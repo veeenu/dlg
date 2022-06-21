@@ -1,27 +1,41 @@
-use clap::{Command, arg};
+use std::{fmt::Display, io::BufRead, process::Command};
+
+use clap::arg;
+use console::Term;
 use dialoguer::{theme::ColorfulTheme, Select};
 
-fn select(input: &str) {
-    let choices = input
-        .lines()
-        .collect::<Vec<_>>();
-
+fn select<S: AsRef<str> + Display>(choices: &[S]) {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .default(0)
         .items(&choices[..])
-        .interact();
+        .interact_on_opt(&Term::stderr());
 
     match selection {
-        Ok(idx) => println!("{}", choices[idx]),
+        Ok(Some(idx)) => println!("{}", choices[idx]),
+        Ok(None) => {}
         Err(e) => eprintln!("{e}"),
     }
 }
 
 fn main() {
-    let cmd = Command::new("dlg")
+    let cmd = clap::Command::new("dlg")
         .bin_name("dlg")
-        .arg(arg!([INPUT]))
+        .arg(arg!(<cmd> ... "command"))
         .get_matches();
 
-    select(&cmd.get_one::<String>("INPUT").unwrap());
+    let (subcmd, subcmd_args) = {
+        let mut it = cmd.values_of("cmd").unwrap();
+        (it.next().unwrap(), it.collect::<Vec<&str>>())
+    };
+
+    let input: Vec<String> = Command::new(subcmd)
+        .args(subcmd_args)
+        .output()
+        .unwrap()
+        .stdout
+        .lines()
+        .map(Result::unwrap)
+        .collect();
+
+    select(&input);
 }
